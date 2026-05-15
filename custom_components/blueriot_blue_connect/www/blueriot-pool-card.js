@@ -25,13 +25,24 @@ class BlueriotPoolCard extends HTMLElement {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
+  _isBlueriiotEntity(s) {
+    // Primary: match by integration platform (HA 2023+)
+    const entry = this._hass.entities?.[s.entity_id];
+    if (entry?.platform === "blueriot_blue_connect") return true;
+    // Fallback: entity_id name patterns
+    return (
+      s.entity_id.includes("blueriot") ||
+      s.entity_id.includes("blue_connect")
+    );
+  }
+
   _getMeasurements() {
     if (!this._hass) return [];
     return Object.values(this._hass.states).filter(
       (s) =>
         s.attributes.device_class !== "timestamp" &&
         s.entity_id.startsWith("sensor.") &&
-        (s.entity_id.includes("blueriot") || s.entity_id.includes("blue_connect")) &&
+        this._isBlueriiotEntity(s) &&
         s.state !== "unavailable" &&
         s.state !== "unknown"
     );
@@ -43,7 +54,7 @@ class BlueriotPoolCard extends HTMLElement {
       (s) =>
         s.attributes.device_class === "timestamp" &&
         s.entity_id.startsWith("sensor.") &&
-        (s.entity_id.includes("blueriot") || s.entity_id.includes("blue_connect"))
+        this._isBlueriiotEntity(s)
     );
   }
 
