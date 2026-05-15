@@ -14,6 +14,10 @@ class BlueriotPoolCard extends HTMLElement {
     return { title: "Pool Monitor" };
   }
 
+  static getConfigElement() {
+    return document.createElement("blueriot-pool-card-editor");
+  }
+
   setConfig(config) {
     this._config = config || {};
   }
@@ -378,6 +382,66 @@ class BlueriotPoolCard extends HTMLElement {
 }
 
 customElements.define("blueriot-pool-card", BlueriotPoolCard);
+
+// ── Visual editor ──────────────────────────────────────────────────────────────
+
+class BlueriotPoolCardEditor extends HTMLElement {
+  connectedCallback() {
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+    }
+    this._render();
+  }
+
+  setConfig(config) {
+    this._config = config || {};
+    this._render();
+  }
+
+  _render() {
+    if (!this.shadowRoot) return;
+    const title = this._config?.title || "";
+    this.shadowRoot.innerHTML = `
+      <style>
+        .editor-row {
+          display: flex;
+          align-items: center;
+          padding: 8px 16px;
+          gap: 12px;
+        }
+        label {
+          flex: 0 0 80px;
+          font-size: 0.9em;
+          color: var(--secondary-text-color);
+        }
+        input {
+          flex: 1;
+          padding: 6px 10px;
+          border: 1px solid var(--divider-color, #ccc);
+          border-radius: 6px;
+          background: var(--card-background-color, #fff);
+          color: var(--primary-text-color);
+          font-size: 0.95em;
+        }
+      </style>
+      <div class="editor-row">
+        <label>Title</label>
+        <input id="title" type="text" .value="${title}" placeholder="Pool Monitor" />
+      </div>
+    `;
+    this.shadowRoot.getElementById("title").addEventListener("input", (e) => {
+      this.dispatchEvent(
+        new CustomEvent("config-changed", {
+          detail: { config: { ...this._config, title: e.target.value } },
+          bubbles: true,
+          composed: true,
+        })
+      );
+    });
+  }
+}
+
+customElements.define("blueriot-pool-card-editor", BlueriotPoolCardEditor);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
