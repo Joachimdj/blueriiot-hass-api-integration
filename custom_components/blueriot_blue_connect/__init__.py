@@ -55,7 +55,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def _async_register_lovelace_resource(hass: HomeAssistant, url: str) -> None:
     """Add a JS module to Lovelace resources if not already present."""
     try:
-        resources = hass.data.get("lovelace", {}).get("resources")
+        lovelace = hass.data.get("lovelace")
+        resources = getattr(lovelace, "resources", None) if lovelace is not None else None
         if resources is None:
             _LOGGER.warning(
                 "Pool card copied to config/www/ but could not auto-register as a "
