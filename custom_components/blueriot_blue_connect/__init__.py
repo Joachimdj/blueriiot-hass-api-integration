@@ -6,9 +6,8 @@ import logging
 import pathlib
 from datetime import timedelta
 
-from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
@@ -32,11 +31,60 @@ _CARD_PATH = pathlib.Path(__file__).parent / "www" / "blueriot-pool-card.js"
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Register the Lovelace card resource once at startup."""
-    hass.http.register_static_path(_CARD_URL, str(_CARD_PATH), cache_headers=False)
-    add_extra_js_url(hass, _CARD_URL)
-    _LOGGER.debug("Registered Blueriot pool card at %s", _CARD_URL)
+    """Register the Lovelace card JS resource."""
+    # Serve the JS file from the www directory
+    try:
+        hass.http.register_static_path(_CARD_URL, str(_CARD_PATH), cache_headers=False)
+    except Exception as err:  # pylint: disable=broad-except
+        _LOGGER.warning("Could not register static path for pool card: %s", err)
+
+    # Strategy 1: add_extra_js_url (HA < 2024.x)
+    try:
+        from homeassistant.components.frontend import add_extra_js_url  # noqa: PLC0415
+        add_extra_js_url(hass, _CARD_URL)
+        _LOGGER.debug("Registered pool card via add_extra_js_url")
+        return True
+    except Exception:  # pylint: disable=broad-except
+        pass
+
+    # Strategy 2: Lovelace storage resources API (HA 2024+)
+    async def _register_lovelace(_event=None):
+        await _async_register_lovelace_resource(hass, _CARD_URL)
+
+    if hass.is_running:
+        await _register_lovelace()
+    else:
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _register_lovelace)
+
     return True
+
+
+async def _async_register_lovelace_resource(hass: HomeAssistant, url: str) -> None:
+    """Add a JS module to Lovelace resources if not already present."""
+    try:
+        resources = hass.data.get("lovelace", {}).get("resources")
+        if resources is None:
+            _LOGGER.warning(
+                "Could not auto-register pool card. "
+                "Add '%s' as a Lovelace resource (type: module) manually "
+                "via Settings → Dashboards → Resources.",
+                url,
+            )
+            return
+        await resources.async_load()
+        current_urls = {r.get("url") for r in resources.data.values()}
+        if url in current_urls:
+            _LOGGER.debug("Pool card resource already registered")
+            return
+        await resources.async_create_item({"res_type": "module", "url": url})
+        _LOGGER.info("Auto-registered Lovelace resource: %s", url)
+    except Exception as err:  # pylint: disable=broad-except
+        _LOGGER.warning(
+            "Could not auto-register pool card. "
+            "Add '%s' as a Lovelace resource (type: module) manually. Error: %s",
+            url,
+            err,
+        )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
