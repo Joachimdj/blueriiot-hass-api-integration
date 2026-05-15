@@ -16,46 +16,39 @@ import unittest
 
 
 class _FakeBlueConnectApi:
-    """Fake cloud auth API."""
+    """Fake BlueConnectApi that mimics direct API calls used by async_fetch_data."""
 
     def __init__(self, username: str, password: str) -> None:
         self.username = username
         self.password = password
-        self.get_user = AsyncMock(return_value=types.SimpleNamespace(id="user"))
         self.close_async = AsyncMock()
-
-
-class _FakeBlueConnectSimpleAPI:
-    """Fake cloud data API."""
-
-    def __init__(self, username: str, password: str, language: str) -> None:
-        self.username = username
-        self.password = password
-        self.language = language
-        self.fetch_data = AsyncMock()
-        self.close_async = AsyncMock()
-        self.pool = types.SimpleNamespace(swimming_pool_id=1234, name="Main Pool")
-        self.blue_device = types.SimpleNamespace(serial="ABC123", battery_low=False)
-        self.measurements = [
-            types.SimpleNamespace(
-                name="ph",
-                value=7.2,
-                timestamp=datetime(2026, 5, 15, 12, 0, 0),
-                trend=types.SimpleNamespace(value="stable"),
-                ok_min=7.0,
-                ok_max=7.6,
-                warning_low=6.8,
-                warning_high=7.8,
-                issuer="sensor",
-            )
-        ]
+        self.get_swimming_pools = AsyncMock(return_value=[
+            types.SimpleNamespace(swimming_pool_id="1234", name="Main Pool")
+        ])
+        self.get_swimming_pool_blue_devices = AsyncMock(return_value=[
+            types.SimpleNamespace(serial="ABC123", battery_low=False)
+        ])
+        self.get_last_measurements = AsyncMock(return_value=types.SimpleNamespace(
+            measurements=[
+                types.SimpleNamespace(
+                    name="ph",
+                    value=7.2,
+                    timestamp=datetime(2026, 5, 15, 12, 0, 0),
+                    trend=types.SimpleNamespace(value="stable"),
+                    ok_min=7.0,
+                    ok_max=7.6,
+                    warning_low=6.8,
+                    warning_high=7.8,
+                    issuer="sensor",
+                )
+            ]
+        ))
 
 
 def _load_api_module():
     """Load api module with mocked ``blueconnect`` dependency."""
     fake_mod = types.ModuleType("blueconnect")
     fake_mod.BlueConnectApi = _FakeBlueConnectApi
-    fake_mod.BlueConnectSimpleAPI = _FakeBlueConnectSimpleAPI
     sys.modules["blueconnect"] = fake_mod
 
     module_path = (
@@ -82,7 +75,6 @@ class TestCloudApi(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self) -> None:
         self.api_module.BlueConnectApi = _FakeBlueConnectApi
-        self.api_module.BlueConnectSimpleAPI = _FakeBlueConnectSimpleAPI
 
     async def test_validate_credentials_success(self):
         """Credential validation returns true when login endpoint returns 200."""
@@ -145,12 +137,12 @@ class TestCloudApi(unittest.IsolatedAsyncioTestCase):
     async def test_fetch_data_wraps_errors(self):
         """Cloud fetch exceptions are wrapped in integration-specific error."""
 
-        class _FailingSimpleAPI(_FakeBlueConnectSimpleAPI):
-            def __init__(self, username: str, password: str, language: str) -> None:
-                super().__init__(username, password, language)
-                self.fetch_data = AsyncMock(side_effect=RuntimeError("network down"))
+        class _FailingApi(_FakeBlueConnectApi):
+            def __init__(self, username: str, password: str) -> None:
+                super().__init__(username, password)
+                self.get_swimming_pools = AsyncMock(side_effect=RuntimeError("network down"))
 
-        self.api_module.BlueConnectSimpleAPI = _FailingSimpleAPI
+        self.api_module.BlueConnectApi = _FailingApi
 
         api = self.api_module.BlueriotBlueConnectCloudAPI("user", "secret", "en")
         with self.assertRaises(self.api_module.BlueriotBlueConnectAPIError):

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import logging
 from typing import Any
 
-from blueconnect import BlueConnectApi, BlueConnectSimpleAPI
+from blueconnect import BlueConnectApi
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class BlueriotBlueConnectCloudAPI:
         self._username = username
         self._password = password
         self._language = language
-        self._simple_api = BlueConnectSimpleAPI(username, password, language)
+        self._api = BlueConnectApi(username, password)
 
     @staticmethod
     def _safe_attr(value: Any, attr: str, default: Any = None) -> Any:
@@ -115,31 +115,45 @@ class BlueriotBlueConnectCloudAPI:
             raise BlueriotBlueConnectAPIError(str(err)) from err
 
     async def async_fetch_data(self) -> dict[str, Any]:
-        """Fetch latest pool and measurement data from cloud."""
+        """Fetch latest pool and measurement data from cloud.
+
+        Uses BlueConnectApi directly to avoid BlueConnectSimpleAPI.fetch_data()
+        which internally calls get_user() and fails on missing UserPreferences fields.
+        """
         try:
-            await self._simple_api.fetch_data()
+            pools = await self._api.get_swimming_pools()
+            if not pools:
+                raise BlueriotBlueConnectAPIError("No swimming pools found on this account")
+
+            pool = pools[0]
+            pool_id = pool.swimming_pool_id
+            pool_name = pool.name
+
+            blue_devices = await self._api.get_swimming_pool_blue_devices(pool_id)
+            blue_device = blue_devices[0] if blue_devices else None
+
+            raw_measurements: list[Any] = []
+            if blue_device:
+                result = await self._api.get_last_measurements(pool_id, blue_device.serial)
+                raw_measurements = result.measurements or []
+
+        except BlueriotBlueConnectAPIError:
+            raise
         except Exception as err:  # pylint: disable=broad-except
             raise BlueriotBlueConnectAPIError(f"Cloud fetch failed: {err}") from err
 
-        pool = self._simple_api.pool
-        pool_id = self._safe_attr(pool, "swimming_pool_id", "unknown_pool")
-        pool_name = self._safe_attr(pool, "name", "Blue Connect Pool")
-
-        measurements = [
-            self._normalize_measurement(measurement)
-            for measurement in (self._simple_api.measurements or [])
-        ]
+        measurements = [self._normalize_measurement(m) for m in raw_measurements]
 
         return {
             "pool": {
                 "id": str(pool_id),
                 "name": str(pool_name),
             },
-            "measurements": [measurement.__dict__ for measurement in measurements],
-            "battery_low": self._safe_attr(self._simple_api.blue_device, "battery_low", None),
-            "device_serial": self._safe_attr(self._simple_api.blue_device, "serial", None),
+            "measurements": [m.__dict__ for m in measurements],
+            "battery_low": getattr(blue_device, "battery_low", None),
+            "device_serial": getattr(blue_device, "serial", None),
         }
 
     async def async_close(self) -> None:
         """Close underlying async clients."""
-        await self._simple_api.close_async()
+        await self._api.close_async()
