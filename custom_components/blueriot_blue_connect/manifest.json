@@ -1,11 +1,11 @@
 {
   "domain": "blueriot_blue_connect",
   "name": "Blueriot Blue Connect",
-  "codeowners": ["@yourusername"],
+  "codeowners": ["@joachimdj"],
   "config_flow": true,
-  "documentation": "https://github.com/yourusername/blueriot-hass",
+  "documentation": "https://github.com/Joachimdj/blueriiot-hass-api-integration",
   "requirements": ["blueconnect"],
   "version": "1.0.0",
-  "issue_tracker": "https://github.com/yourusername/blueriot-hass/issues",
+  "issue_tracker": "https://github.com/Joachimdj/blueriiot-hass-api-integration/issues",
   "integration_type": "service"
 }
