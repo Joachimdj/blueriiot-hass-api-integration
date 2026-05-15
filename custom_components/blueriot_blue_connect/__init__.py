@@ -8,8 +8,8 @@ import shutil
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .api import BlueriotBlueConnectCloudAPI
@@ -47,8 +47,15 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         _LOGGER.warning("Could not copy pool card to www: %s", err)
         return True
 
-    # 2. Register as a Lovelace resource so the browser loads it
-    await _async_register_lovelace_resource(hass, _CARD_LOCAL_URL)
+    # 2. Defer resource registration until after HA is fully started so that
+    #    hass.data["lovelace"] is guaranteed to be populated.
+    @callback
+    def _on_hass_started(event) -> None:  # noqa: ANN001
+        hass.async_create_task(
+            _async_register_lovelace_resource(hass, _CARD_LOCAL_URL)
+        )
+
+    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_hass_started)
     return True
 
 
@@ -56,24 +63,42 @@ async def _async_register_lovelace_resource(hass: HomeAssistant, url: str) -> No
     """Add a JS module to Lovelace resources if not already present."""
     try:
         lovelace = hass.data.get("lovelace")
-        resources = getattr(lovelace, "resources", None) if lovelace is not None else None
-        if resources is None:
+        if lovelace is None:
             _LOGGER.warning(
-                "Pool card copied to config/www/ but could not auto-register as a "
-                "Lovelace resource. Add it manually: Settings → Dashboards → Resources "
-                "→ URL: %s  Type: JavaScript module",
+                "Lovelace not found in hass.data — pool card not auto-registered. "
+                "Add manually: Settings → Dashboards → Resources → URL: %s  "
+                "Type: JavaScript module",
                 url,
             )
             return
-        await resources.async_load()
-        if any(r.get("url") == url for r in resources.data.values()):
-            _LOGGER.debug("Pool card resource already registered")
+
+        resources = getattr(lovelace, "resources", None)
+        if resources is None:
+            _LOGGER.warning(
+                "LovelaceData has no 'resources' attribute — pool card not auto-registered. "
+                "Add manually: Settings → Dashboards → Resources → URL: %s  "
+                "Type: JavaScript module",
+                url,
+            )
             return
+
+        await resources.async_load()
+
+        # async_items() is the public API; fall back to .data.values() if absent
+        existing = (
+            list(resources.async_items())
+            if hasattr(resources, "async_items")
+            else list(resources.data.values())
+        )
+        if any(item.get("url") == url for item in existing):
+            _LOGGER.debug("Pool card resource already registered: %s", url)
+            return
+
         await resources.async_create_item({"res_type": "module", "url": url})
         _LOGGER.info("Auto-registered Lovelace resource: %s", url)
     except Exception as err:  # pylint: disable=broad-except
         _LOGGER.warning(
-            "Pool card copied to config/www/ but could not auto-register. "
+            "Could not auto-register pool card Lovelace resource. "
             "Add manually: Settings → Dashboards → Resources → URL: %s  "
             "Type: JavaScript module. Error: %s",
             url,
