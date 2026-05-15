@@ -30,10 +30,13 @@ class BlueriotPoolCard extends HTMLElement {
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   _isBlueriiotEntity(s) {
-    // Primary: match by integration platform (HA 2023+)
+    // 1. Match by integration platform (HA entity registry, 2023+)
     const entry = this._hass.entities?.[s.entity_id];
     if (entry?.platform === "blueriot_blue_connect") return true;
-    // Fallback: entity_id name patterns
+    // 2. Match by unique attributes our sensors always expose
+    if ("issuer" in (s.attributes || {})) return true;
+    if ("ok_min" in (s.attributes || {}) && "ok_max" in (s.attributes || {})) return true;
+    // 3. Fallback: entity_id name patterns
     return (
       s.entity_id.includes("blueriot") ||
       s.entity_id.includes("blue_connect")
@@ -358,7 +361,27 @@ class BlueriotPoolCard extends HTMLElement {
 
         ${
           measurements.length === 0
-            ? '<div class="empty">No sensor data available</div>'
+            ? (() => {
+                // Debug: show first 5 sensor entity_ids + their platform to help diagnose
+                const allSensors = this._hass
+                  ? Object.values(this._hass.states)
+                      .filter((s) => s.entity_id.startsWith("sensor."))
+                      .slice(0, 8)
+                      .map((s) => {
+                        const plat = this._hass.entities?.[s.entity_id]?.platform || "?";
+                        const hasIssuer = "issuer" in (s.attributes || {});
+                        const hasOkMin = "ok_min" in (s.attributes || {});
+                        return `${s.entity_id} [platform=${plat}, issuer=${hasIssuer}, ok_min=${hasOkMin}]`;
+                      })
+                  : [];
+                return `<div class="empty">
+                  <div>No sensor data found.</div>
+                  <details style="text-align:left;font-size:0.75em;margin-top:8px;">
+                    <summary>Debug — first sensors visible</summary>
+                    <pre style="white-space:pre-wrap;word-break:break-all;">${allSensors.join("\n") || "(none)"}</pre>
+                  </details>
+                </div>`;
+              })()
             : `
           ${primary.length > 0 ? `<div class="primary-row">${primaryHtml}</div>` : ""}
           ${
