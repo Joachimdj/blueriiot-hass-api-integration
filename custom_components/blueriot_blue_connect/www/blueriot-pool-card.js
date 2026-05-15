@@ -14,10 +14,6 @@ class BlueriotPoolCard extends HTMLElement {
     return { title: "Pool Monitor" };
   }
 
-  static getConfigElement() {
-    return document.createElement("blueriot-pool-card-editor");
-  }
-
   setConfig(config) {
     this._config = config || {};
   }
