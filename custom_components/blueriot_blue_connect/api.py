@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import aiohttp
 from dataclasses import dataclass
 import logging
 from typing import Any
@@ -9,6 +10,9 @@ from typing import Any
 from blueconnect import BlueConnectApi, BlueConnectSimpleAPI
 
 _LOGGER = logging.getLogger(__name__)
+
+_LOGIN_URL = "https://api.riiotlabs.com/prod/user/login"
+_LOGIN_HEADERS = {"User-Agent": "BlueConnect/3.2.1", "Accept": "*/*"}
 
 
 class BlueriotBlueConnectAPIError(Exception):
@@ -79,27 +83,36 @@ class BlueriotBlueConnectCloudAPI:
 
     @staticmethod
     async def async_validate_credentials(username: str, password: str) -> bool:
-        """Validate cloud credentials using the official API.
+        """Validate cloud credentials by calling the login endpoint directly.
 
-        Returns True on success.
+        Avoids blueconnect model parsing which breaks when the API omits
+        optional user preference fields (display_temperature_unit, etc.).
+
         Raises BlueriotBlueConnectInvalidAuth if credentials are rejected.
         Raises BlueriotBlueConnectAPIError for network/server problems.
         """
-        api = BlueConnectApi(username, password)
         try:
-            user_info = await api.get_user()
-            return user_info is not None
-        except Exception as err:  # pylint: disable=broad-except
-            err_str = str(err)
-            _LOGGER.warning("Blue Connect credential validation failed: %s", err_str)
-            # The library raises a plain Exception whose message starts with
-            # "Error logging in user:" when the HTTP login returns non-200.
-            # Treat that as an auth failure; everything else is a connectivity problem.
-            if "Error logging in user" in err_str or "login" in err_str.lower():
-                raise BlueriotBlueConnectInvalidAuth(err_str) from err
-            raise BlueriotBlueConnectAPIError(err_str) from err
-        finally:
-            await api.close_async()
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    _LOGIN_URL,
+                    json={"email": username, "password": password},
+                    headers=_LOGIN_HEADERS,
+                    ssl=False,
+                ) as response:
+                    if response.status == 200:
+                        return True
+                    body = await response.text()
+                    _LOGGER.warning(
+                        "Blue Connect login rejected (HTTP %s): %s", response.status, body
+                    )
+                    raise BlueriotBlueConnectInvalidAuth(
+                        f"Login rejected (HTTP {response.status}): {body}"
+                    )
+        except BlueriotBlueConnectInvalidAuth:
+            raise
+        except Exception as err:
+            _LOGGER.warning("Blue Connect credential validation failed: %s", err)
+            raise BlueriotBlueConnectAPIError(str(err)) from err
 
     async def async_fetch_data(self) -> dict[str, Any]:
         """Fetch latest pool and measurement data from cloud."""

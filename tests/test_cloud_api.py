@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 import importlib.util
 import sys
 import types
 import unittest
-from unittest.mock import AsyncMock
 
 
 class _FakeBlueConnectApi:
@@ -85,25 +85,41 @@ class TestCloudApi(unittest.IsolatedAsyncioTestCase):
         self.api_module.BlueConnectSimpleAPI = _FakeBlueConnectSimpleAPI
 
     async def test_validate_credentials_success(self):
-        """Credential validation returns true on valid user info."""
-        result = await self.api_module.BlueriotBlueConnectCloudAPI.async_validate_credentials(
-            "user@example.com", "secret"
-        )
+        """Credential validation returns true when login endpoint returns 200."""
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+
+        mock_session = MagicMock()
+        mock_session.post = MagicMock(return_value=mock_response)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        with patch.object(self.api_module.aiohttp, "ClientSession", return_value=mock_session):
+            result = await self.api_module.BlueriotBlueConnectCloudAPI.async_validate_credentials(
+                "user@example.com", "secret"
+            )
         self.assertTrue(result)
 
     async def test_validate_credentials_failure(self):
-        """Credential validation returns false on API error."""
+        """Credential validation raises InvalidAuth when login endpoint returns 401/500."""
+        mock_response = MagicMock()
+        mock_response.status = 401
+        mock_response.text = AsyncMock(return_value="Unauthorized")
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
 
-        class _FailingApi(_FakeBlueConnectApi):
-            def __init__(self, username: str, password: str) -> None:
-                super().__init__(username, password)
-                self.get_user = AsyncMock(side_effect=Exception("Error logging in user: bad creds"))
+        mock_session = MagicMock()
+        mock_session.post = MagicMock(return_value=mock_response)
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
 
-        self.api_module.BlueConnectApi = _FailingApi
-        with self.assertRaises(self.api_module.BlueriotBlueConnectInvalidAuth):
-            await self.api_module.BlueriotBlueConnectCloudAPI.async_validate_credentials(
-                "user@example.com", "wrong"
-            )
+        with patch.object(self.api_module.aiohttp, "ClientSession", return_value=mock_session):
+            with self.assertRaises(self.api_module.BlueriotBlueConnectInvalidAuth):
+                await self.api_module.BlueriotBlueConnectCloudAPI.async_validate_credentials(
+                    "user@example.com", "wrong"
+                )
 
     async def test_fetch_data_normalizes_measurements(self):
         """Fetched cloud data is normalized to integration payload format."""
