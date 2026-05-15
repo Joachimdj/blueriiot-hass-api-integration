@@ -13,7 +13,8 @@
       }
     },
     "error": {
-      "cannot_connect": "Failed to authenticate with Blue Connect cloud.",
+      "cannot_connect": "Unable to reach the Blue Connect cloud. Check your network and try again.",
+      "invalid_auth": "Invalid email or password. Check your Blue Connect app credentials.",
       "unknown": "An unexpected error occurred."
     }
   },

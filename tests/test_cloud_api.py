@@ -21,7 +21,7 @@ class _FakeBlueConnectApi:
     def __init__(self, username: str, password: str) -> None:
         self.username = username
         self.password = password
-        self.get_user_info = AsyncMock(return_value={"id": "user"})
+        self.get_user = AsyncMock(return_value=types.SimpleNamespace(id="user"))
         self.close_async = AsyncMock()
 
 
@@ -97,13 +97,13 @@ class TestCloudApi(unittest.IsolatedAsyncioTestCase):
         class _FailingApi(_FakeBlueConnectApi):
             def __init__(self, username: str, password: str) -> None:
                 super().__init__(username, password)
-                self.get_user_info = AsyncMock(side_effect=RuntimeError("bad creds"))
+                self.get_user = AsyncMock(side_effect=Exception("Error logging in user: bad creds"))
 
         self.api_module.BlueConnectApi = _FailingApi
-        result = await self.api_module.BlueriotBlueConnectCloudAPI.async_validate_credentials(
-            "user@example.com", "wrong"
-        )
-        self.assertFalse(result)
+        with self.assertRaises(self.api_module.BlueriotBlueConnectInvalidAuth):
+            await self.api_module.BlueriotBlueConnectCloudAPI.async_validate_credentials(
+                "user@example.com", "wrong"
+            )
 
     async def test_fetch_data_normalizes_measurements(self):
         """Fetched cloud data is normalized to integration payload format."""

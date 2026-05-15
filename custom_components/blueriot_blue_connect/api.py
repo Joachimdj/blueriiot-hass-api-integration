@@ -12,7 +12,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class BlueriotBlueConnectAPIError(Exception):
-    """Exception for API errors."""
+    """Exception for connectivity / server errors."""
+
+
+class BlueriotBlueConnectInvalidAuth(BlueriotBlueConnectAPIError):
+    """Exception raised when credentials are rejected by the cloud."""
 
 
 @dataclass
@@ -75,14 +79,25 @@ class BlueriotBlueConnectCloudAPI:
 
     @staticmethod
     async def async_validate_credentials(username: str, password: str) -> bool:
-        """Validate cloud credentials using the official API."""
+        """Validate cloud credentials using the official API.
+
+        Returns True on success.
+        Raises BlueriotBlueConnectInvalidAuth if credentials are rejected.
+        Raises BlueriotBlueConnectAPIError for network/server problems.
+        """
         api = BlueConnectApi(username, password)
         try:
             user_info = await api.get_user()
             return user_info is not None
         except Exception as err:  # pylint: disable=broad-except
-            _LOGGER.debug("Credential validation failed: %s", err)
-            return False
+            err_str = str(err)
+            _LOGGER.warning("Blue Connect credential validation failed: %s", err_str)
+            # The library raises a plain Exception whose message starts with
+            # "Error logging in user:" when the HTTP login returns non-200.
+            # Treat that as an auth failure; everything else is a connectivity problem.
+            if "Error logging in user" in err_str or "login" in err_str.lower():
+                raise BlueriotBlueConnectInvalidAuth(err_str) from err
+            raise BlueriotBlueConnectAPIError(err_str) from err
         finally:
             await api.close_async()
 

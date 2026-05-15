@@ -8,9 +8,8 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 
-from .api import BlueriotBlueConnectCloudAPI
+from .api import BlueriotBlueConnectCloudAPI, BlueriotBlueConnectAPIError, BlueriotBlueConnectInvalidAuth
 from .const import (
     CONF_LANGUAGE,
     CONF_PASSWORD,
@@ -36,16 +35,10 @@ DATA_SCHEMA = vol.Schema(
 
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """Validate the user input allows us to connect."""
-
     username = data[CONF_USERNAME]
     password = data[CONF_PASSWORD]
-    valid = await BlueriotBlueConnectCloudAPI.async_validate_credentials(
-        username, password
-    )
-
-    if not valid:
-        raise CannotConnect("Could not authenticate against cloud API")
-
+    # Let BlueriotBlueConnectInvalidAuth and BlueriotBlueConnectAPIError propagate
+    await BlueriotBlueConnectCloudAPI.async_validate_credentials(username, password)
     masked_username = username.split("@")[0]
     return {"title": f"Blueriot Blue Connect ({masked_username})"}
 
@@ -67,7 +60,9 @@ class BlueriotBlueConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                 return self.async_create_entry(title=info["title"], data=user_input)
 
-            except CannotConnect:
+            except BlueriotBlueConnectInvalidAuth:
+                errors["base"] = "invalid_auth"
+            except BlueriotBlueConnectAPIError:
                 errors["base"] = "cannot_connect"
             except Exception as err:  # pylint: disable=broad-except
                 _LOGGER.exception("Unexpected exception: %s", err)
@@ -80,9 +75,3 @@ class BlueriotBlueConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_import(self, import_data: dict[str, Any]) -> config_entries.FlowResult:
         """Handle import from configuration.yaml."""
         return await self.async_step_user(import_data)
-
-
-class CannotConnect(HomeAssistantError):
-    """Error to indicate we cannot connect."""
-
-    pass
