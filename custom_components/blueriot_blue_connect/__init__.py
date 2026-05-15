@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import pathlib
 import shutil
@@ -28,7 +29,15 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 _CARD_SOURCE = pathlib.Path(__file__).parent / "www" / "blueriot-pool-card.js"
-_CARD_LOCAL_URL = "/local/blueriot-pool-card.js"
+_MANIFEST = pathlib.Path(__file__).parent / "manifest.json"
+
+def _card_url() -> str:
+    """Return the card URL with a version query string to bust browser cache."""
+    try:
+        version = json.loads(_MANIFEST.read_text()).get("version", "0")
+    except Exception:  # pylint: disable=broad-except
+        version = "0"
+    return f"/local/blueriot-pool-card.js?v={version}"
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -52,7 +61,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     @callback
     def _on_hass_started(event) -> None:  # noqa: ANN001
         hass.async_create_task(
-            _async_register_lovelace_resource(hass, _CARD_LOCAL_URL)
+            _async_register_lovelace_resource(hass, _card_url())
         )
 
     hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _on_hass_started)
@@ -90,6 +99,18 @@ async def _async_register_lovelace_resource(hass: HomeAssistant, url: str) -> No
             if hasattr(resources, "async_items")
             else list(resources.data.values())
         )
+
+        # Remove any stale entries for the same JS file (different ?v= query)
+        base_path = "/local/blueriot-pool-card.js"
+        for item in existing:
+            item_url = item.get("url", "")
+            if item_url.startswith(base_path) and item_url != url:
+                try:
+                    await resources.async_delete_item(item["id"])
+                    _LOGGER.debug("Removed stale Lovelace resource: %s", item_url)
+                except Exception:  # pylint: disable=broad-except
+                    pass
+
         if any(item.get("url") == url for item in existing):
             _LOGGER.debug("Pool card resource already registered: %s", url)
             return
