@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+import homeassistant.util.dt as dt_util
 
 from .const import (
     ATTR_ISSUER,
@@ -45,8 +46,9 @@ async def async_setup_entry(
     entities: list[BlueriotMeasurementSensor] = []
     for measurement in measurements:
         measurement_name = measurement.get("name")
-        if measurement_name not in SENSOR_TYPES:
+        if not measurement_name:
             continue
+        # Create a sensor for every measurement the API returns, even unknown ones
         entities.append(
             BlueriotMeasurementSensor(
                 coordinator,
@@ -56,6 +58,18 @@ async def async_setup_entry(
                 measurement_name,
             )
         )
+        if measurement_name not in SENSOR_TYPES:
+            _LOGGER.debug("Unknown measurement type from API: %s (will still be exposed)", measurement_name)
+
+    # Last measurement timestamp sensors
+    for key, label in (
+        ("last_measure_ble", "Last Measurement (BLE)"),
+        ("last_measure_sigfox", "Last Measurement (Sigfox)"),
+    ):
+        if coordinator.data.get(key) is not None:
+            entities.append(
+                BlueriotLastMeasureSensor(coordinator, entry, pool_id, pool_name, key, label)
+            )
 
     async_add_entities(entities)
 
@@ -159,3 +173,50 @@ class BlueriotMeasurementSensor(CoordinatorEntity, SensorEntity):
         if self._measurement_name in {"orp", "conductivity", "salinity"}:
             return 0
         return None
+
+
+class BlueriotLastMeasureSensor(CoordinatorEntity, SensorEntity):
+    """Sensor showing when the Blue Connect device last transmitted a measurement."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: Any,
+        entry: ConfigEntry,
+        pool_id: str,
+        pool_name: str,
+        data_key: str,
+        label: str,
+    ) -> None:
+        """Initialize the last-measurement timestamp sensor."""
+        super().__init__(coordinator)
+        self._data_key = data_key
+        self._attr_unique_id = f"{entry.entry_id}_{pool_id}_{data_key}"
+        self._attr_name = f"{pool_name} {label}"
+        self._attr_icon = "mdi:clock-outline"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, pool_id)},
+            name=pool_name,
+            manufacturer=MANUFACTURER,
+            model=MODEL,
+        )
+
+    @property
+    def native_value(self):
+        """Return the last measurement timestamp as a timezone-aware datetime."""
+        raw = self.coordinator.data.get(self._data_key)
+        if raw is None:
+            return None
+        # Already a datetime? Make sure it is tz-aware.
+        from datetime import datetime
+        if isinstance(raw, datetime):
+            if raw.tzinfo is None:
+                return dt_util.as_utc(raw)
+            return raw
+        # String ISO timestamp
+        try:
+            return dt_util.parse_datetime(str(raw))
+        except Exception:  # pylint: disable=broad-except
+            return None

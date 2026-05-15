@@ -20,24 +20,25 @@
   },
   "entity": {
     "sensor": {
-      "ph": {
-        "name": "pH Level"
-      },
-      "chlorine": {
-        "name": "Chlorine Level"
-      },
-      "temperature": {
-        "name": "Water Temperature"
-      },
-      "orp": {
-        "name": "ORP Level"
-      },
-      "salinity": {
-        "name": "Salinity"
-      },
-      "conductivity": {
-        "name": "Conductivity"
-      }
+      "ph": {"name": "pH Level"},
+      "temperature": {"name": "Water Temperature"},
+      "orp": {"name": "ORP / Redox"},
+      "conductivity": {"name": "Conductivity"},
+      "salinity": {"name": "Salinity"},
+      "chlorine": {"name": "Chlorine"},
+      "free_chlorine": {"name": "Free Chlorine"},
+      "total_chlorine": {"name": "Total Chlorine"},
+      "bromine": {"name": "Bromine"},
+      "alkalinity": {"name": "Alkalinity"},
+      "total_alkalinity": {"name": "Total Alkalinity"},
+      "calcium_hardness": {"name": "Calcium Hardness"},
+      "cyanuric_acid": {"name": "Cyanuric Acid"},
+      "tds": {"name": "TDS"},
+      "magnesium": {"name": "Magnesium"},
+      "biguanide": {"name": "Biguanide"},
+      "biguanide_shock": {"name": "Biguanide Shock"},
+      "salt": {"name": "Salt"},
+      "balance": {"name": "Water Balance"}
     }
   }
 }

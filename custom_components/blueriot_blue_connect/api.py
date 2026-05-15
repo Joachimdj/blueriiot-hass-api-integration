@@ -152,6 +152,8 @@ class BlueriotBlueConnectCloudAPI:
             "measurements": [m.__dict__ for m in measurements],
             "battery_low": getattr(blue_device, "battery_low", None),
             "device_serial": getattr(blue_device, "serial", None),
+            "last_measure_ble": self._normalize_timestamp(getattr(blue_device, "last_measure_ble", None)),
+            "last_measure_sigfox": self._normalize_timestamp(getattr(blue_device, "last_measure_sigfox", None)),
         }
 
     async def async_close(self) -> None:
