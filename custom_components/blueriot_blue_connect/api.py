@@ -78,8 +78,8 @@ class BlueriotBlueConnectCloudAPI:
         """Validate cloud credentials using the official API."""
         api = BlueConnectApi(username, password)
         try:
-            user_info = await api.get_user_info()
-            return user_info not in (None, {})
+            user_info = await api.get_user()
+            return user_info is not None
         except Exception as err:  # pylint: disable=broad-except
             _LOGGER.debug("Credential validation failed: %s", err)
             return False
