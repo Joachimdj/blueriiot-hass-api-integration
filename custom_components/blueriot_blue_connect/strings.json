@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Blueriot Blue Connect Cloud",
+        "description": "Enter your Blue Connect cloud account credentials.",
+        "data": {
+          "username": "Username",
+          "password": "Password",
+          "language": "Language",
+          "polling_interval": "Polling Interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to authenticate with Blue Connect cloud.",
+      "unknown": "An unexpected error occurred."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "ph": {
+        "name": "pH Level"
+      },
+      "chlorine": {
+        "name": "Chlorine Level"
+      },
+      "temperature": {
+        "name": "Water Temperature"
+      },
+      "orp": {
+        "name": "ORP Level"
+      },
+      "salinity": {
+        "name": "Salinity"
+      },
+      "conductivity": {
+        "name": "Conductivity"
+      }
+    }
+  }
+}

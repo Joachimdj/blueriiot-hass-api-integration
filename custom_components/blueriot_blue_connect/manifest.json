@@ -1,0 +1,11 @@
+{
+  "domain": "blueriot_blue_connect",
+  "name": "Blueriot Blue Connect",
+  "codeowners": ["@yourusername"],
+  "config_flow": true,
+  "documentation": "https://github.com/yourusername/blueriot-hass",
+  "requirements": ["blueconnect"],
+  "version": "1.0.0",
+  "issue_tracker": "https://github.com/yourusername/blueriot-hass/issues",
+  "integration_type": "service"
+}
